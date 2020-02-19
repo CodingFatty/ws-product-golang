@@ -19,6 +19,13 @@ var (
 	c = counters{}
 
 	content = []string{"sports", "entertainment", "business", "education"}
+
+	// time layout
+	timeLayout = "2006-01-02 15:04"
+	// counter for each click
+	Counters = make(map[string]counters)
+	// store storing in memory that get updated every 5 seconds
+	Store = make(map[string]counters)
 )
 
 func welcomeHandler(w http.ResponseWriter, r *http.Request) {
@@ -55,6 +62,12 @@ func processClick(data string) error {
 	c.click++
 	c.Unlock()
 
+	// counter for each click
+	t := time.Now()
+	var currentTime = data + ":" + t.Format(timeLayout)
+	Counters[currentTime] = c
+	fmt.Println(Counters)
+
 	return nil
 }
 
@@ -69,14 +82,36 @@ func isAllowed() bool {
 	return true
 }
 
-func uploadCounters() error {
-	return nil
+func uploadCounters(currentCounter map[string]counters, s chan map[string]counters) {
+	// copying value to Store and delete key/value from Counters
+	for k, v := range currentCounter {
+		// v.Lock()
+		Store[k] = v
+		// v.Unlock()
+		delete(currentCounter, k)
+	}
+	s <- currentCounter
 }
 
 func main() {
 	http.HandleFunc("/", welcomeHandler)
 	http.HandleFunc("/view/", viewHandler)
 	http.HandleFunc("/stats/", statsHandler)
+
+	// repeat uploading every 5 secs
+	ticker := time.NewTicker(5 * time.Second)
+	go func() {
+		for  {
+			select {
+			case <-ticker.C:
+				s := make(chan map[string]counters)
+				go uploadCounters(Counters,s)
+				Counters := <- s
+				fmt.Println("uploaded", Counters)
+				fmt.Println(Store)
+			}
+		}
+	}()
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
