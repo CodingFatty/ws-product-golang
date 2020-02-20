@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sync"
 	"time"
+	"github.com/didip/tollbooth"
 )
 
 type counters struct {
@@ -94,9 +95,11 @@ func uploadCounters(currentCounter map[string]counters, s chan map[string]counte
 }
 
 func main() {
-	http.HandleFunc("/", welcomeHandler)
-	http.HandleFunc("/view/", viewHandler)
-	http.HandleFunc("/stats/", statsHandler)
+	// initial a new multiplxer for limiting request at middleware handler
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", welcomeHandler)
+	mux.HandleFunc("/view/", viewHandler)
+	mux.HandleFunc("/stats/", statsHandler)
 
 	// repeat uploading every 5 secs
 	ticker := time.NewTicker(5 * time.Second)
@@ -112,6 +115,6 @@ func main() {
 			}
 		}
 	}()
-
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	// limit 1 request per second by default with no initial number of token
+	log.Fatal(http.ListenAndServe(":8080", tollbooth.LimitHandler(tollbooth.NewLimiter(1, nil), mux)))
 }
